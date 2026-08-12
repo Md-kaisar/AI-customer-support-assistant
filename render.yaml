@@ -1,0 +1,72 @@
+# Render Blueprint -- deploy via "New +" > "Blueprint" in the Render dashboard
+# and point it at this repo. Docs: https://render.com/docs/infrastructure-as-code
+#
+# MongoDB is NOT provisioned here: Render doesn't offer managed MongoDB
+# (only Postgres and Key Value/Redis). Use a free MongoDB Atlas cluster
+# instead and paste its connection string into MONGODB_URI below after
+# the service is created (see README.md > "Deploying to Render").
+#
+# The vector store's disk (CHROMA_PERSIST_DIR) is ephemeral on Render's free
+# tier -- it's wiped on every deploy/restart. app/main.py auto-seeds the
+# knowledge base from app/knowledge_base/faq_docs.py on startup if the
+# vector store is empty, so this is handled automatically; no persistent
+# disk is required for this small example KB.
+
+services:
+  - type: web
+    name: customer-support-ai
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+      # --- Chat / generation (OpenRouter example -- swap for real OpenAI values if preferred) ---
+      - key: CHAT_API_KEY
+        sync: false # set manually in the Render dashboard -- do not commit secrets
+      - key: CHAT_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: CHAT_MODEL
+        value: openrouter/free
+      - key: OPENROUTER_SITE_URL
+        value: https://your-service-name.onrender.com # update after first deploy
+      - key: OPENROUTER_SITE_NAME
+        value: AI Customer Support Assistant
+
+      # --- Embeddings: local, free, no key needed ---
+      - key: USE_LOCAL_EMBEDDINGS
+        value: "true"
+
+      # --- MongoDB (conversation memory) -- use a free MongoDB Atlas cluster ---
+      - key: MONGODB_URI
+        sync: false # e.g. mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net
+      - key: MONGODB_DB
+        value: support_ai
+
+      # --- Vector store ---
+      - key: CHROMA_PERSIST_DIR
+        value: ./chroma_data
+      - key: CHROMA_COLLECTION
+        value: kb_docs
+      - key: RETRIEVAL_TOP_K
+        value: "3"
+
+      # --- Conversation memory / escalation ---
+      - key: MAX_HISTORY_TURNS
+        value: "8"
+      - key: ESCALATION_CONFIDENCE_THRESHOLD
+        value: "0.55"
+
+      # --- Voice (optional; leave blank to disable /voice) ---
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: WHISPER_MODEL
+        value: whisper-1
+      - key: TTS_MODEL
+        value: tts-1
+      - key: TTS_VOICE
+        value: alloy

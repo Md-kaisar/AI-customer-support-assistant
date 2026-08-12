@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Support Assistant — Test Console</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #262a33;
+    --text: #e6e8eb;
+    --muted: #8b93a1;
+    --accent: #5b8cff;
+    --user-bubble: #5b8cff;
+    --bot-bubble: #232733;
+    --escalate: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .meta { font-size: 12px; color: var(--muted); }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .msg {
+    max-width: 70%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    line-height: 1.4;
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--user-bubble);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot {
+    align-self: flex-start;
+    background: var(--bot-bubble);
+    border-bottom-left-radius: 4px;
+  }
+  .msg .badge {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
+    color: var(--muted);
+  }
+  .msg .badge.escalate {
+    background: rgba(255,107,107,0.15);
+    color: var(--escalate);
+  }
+  .sources {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .sources summary { cursor: pointer; }
+  #inputBar {
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  #messageInput {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    resize: none;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 0 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  #status { font-size: 12px; color: var(--muted); padding: 0 20px 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛟 Support Assistant — Test Console</h1>
+  <div class="meta">conversation_id: <span id="convoIdLabel"></span> &nbsp; | &nbsp;
+    <a href="/docs" style="color:var(--accent)">API docs</a>
+  </div>
+</header>
+
+<div id="log"></div>
+<div id="status"></div>
+
+<div id="inputBar">
+  <button class="secondary" id="newConvoBtn" title="Start a new conversation">New chat</button>
+  <textarea id="messageInput" rows="1" placeholder="Ask about billing, password reset, storage limits..."></textarea>
+  <button id="sendBtn">Send</button>
+</div>
+
+<script>
+  const API_BASE = window.location.origin;
+  let conversationId = crypto.randomUUID();
+
+  const log = document.getElementById('log');
+  const input = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const newConvoBtn = document.getElementById('newConvoBtn');
+  const statusEl = document.getElementById('status');
+  const convoIdLabel = document.getElementById('convoIdLabel');
+
+  function refreshConvoLabel() {
+    convoIdLabel.textContent = conversationId.slice(0, 8) + '…';
+  }
+  refreshConvoLabel();
+
+  function addMessage(role, text, meta = {}) {
+    const bubble = document.createElement('div');
+    bubble.className = `msg ${role === 'user' ? 'user' : 'bot'}`;
+
+    const textNode = document.createElement('div');
+    textNode.textContent = text;
+    bubble.appendChild(textNode);
+
+    if (role === 'bot' && typeof meta.confidence === 'number') {
+      const badge = document.createElement('span');
+      badge.className = 'badge' + (meta.escalate ? ' escalate' : '');
+      badge.textContent = meta.escalate
+        ? `⚠ escalated (${meta.reason || 'flagged'}) · confidence ${meta.confidence}`
+        : `confidence ${meta.confidence}`;
+      bubble.appendChild(badge);
+    }
+
+    if (role === 'bot' && meta.sources && meta.sources.length) {
+      const details = document.createElement('details');
+      details.className = 'sources';
+      const summary = document.createElement('summary');
+      summary.textContent = `${meta.sources.length} source(s) used`;
+      details.appendChild(summary);
+      meta.sources.forEach(s => {
+        const p = document.createElement('div');
+        p.textContent = `• ${s.title} (score ${s.score})`;
+        details.appendChild(p);
+      });
+      bubble.appendChild(details);
+    }
+
+    log.appendChild(bubble);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage('user', text);
+    input.value = '';
+    sendBtn.disabled = true;
+    statusEl.textContent = 'Assistant is thinking…';
+
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversationId, message: text }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      addMessage('bot', data.response, {
+        confidence: data.confidence,
+        escalate: data.escalate,
+        reason: data.escalation_reason,
+        sources: data.sources,
+      });
+    } catch (e) {
+      addMessage('bot', `⚠ Error: ${e.message}`);
+    } finally {
+      statusEl.textContent = '';
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  newConvoBtn.addEventListener('click', () => {
+    conversationId = crypto.randomUUID();
+    refreshConvoLabel();
+    log.innerHTML = '';
+    statusEl.textContent = 'Started a new conversation.';
+    setTimeout(() => statusEl.textContent = '', 1500);
+  });
+
+  addMessage('bot', "Hi! I'm the Acme Cloud Storage support assistant. Ask me about billing, passwords, storage limits, sharing, or 2FA.");
+</script>
+
+</body>
+</html>

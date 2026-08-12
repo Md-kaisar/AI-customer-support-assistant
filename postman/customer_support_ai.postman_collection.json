@@ -1,0 +1,95 @@
+{
+  "info": {
+    "name": "AI Customer Support Assistant",
+    "description": "Endpoints for the RAG-based support assistant: chat, voice, conversation history, and escalations.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "conversation_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "Chat - New Conversation",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const data = pm.response.json();",
+              "pm.collectionVariables.set('conversation_id', data.conversation_id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/chat",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversation_id\": \"{{$guid}}\",\n  \"message\": \"How much storage do I get on the Pro plan?\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Chat - Follow Up (same conversation)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/chat",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"message\": \"And what happens if I go over that limit?\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Chat - Frustrated User (triggers escalation)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/chat",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversation_id\": \"{{$guid}}\",\n  \"message\": \"This is ridiculous, I've asked twice already, let me talk to a real person!\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Voice - Upload Audio",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/voice?respond_with_audio=false",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "audio", "type": "file", "src": [] }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Conversation History",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/conversations/{{conversation_id}}"
+      }
+    },
+    {
+      "name": "List Escalations",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/escalations"
+      }
+    }
+  ]
+}
